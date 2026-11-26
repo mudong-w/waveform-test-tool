@@ -1,0 +1,13 @@
+{
+  "name": "waveform-test",
+  "version": "0.1.0",
+  "description": "波形测试工具，支持示波器长记录采集、周期复核和报告导出。",
+  "license": "MIT",
+  "repository": "https://github.com/mudong-w/waveform-test-tool",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "波形测试工具",
+    "shortDescription": "采集示波器长记录，复核完整周期并生成幅频报告",
+    "developerName": "mudong-w"
+  }
+}

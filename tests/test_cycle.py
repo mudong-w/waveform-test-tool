@@ -2,12 +2,48 @@ import json
 from tempfile import TemporaryDirectory
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 import numpy as np
 from waveform_test.demo import demo
 from waveform_test.analysis import read_trace, find_cycle, pulse_metrics
 
 
 class PulseRecordTest(unittest.TestCase):
+    def test_native_report_embeds_editor_output_verbatim(self):
+        from PIL import Image
+        from openpyxl import load_workbook
+        from waveform_test.report import analyze
+        from waveform_test.storage import new_run
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            demo(root)
+            csv_path = root / "waveform.csv"
+            _, volts, _ = read_trace(csv_path)
+            columns = np.minimum(799, np.arange(len(volts))*800//len(volts))
+            active = np.bincount(columns, weights=np.abs(volts)>=3, minlength=800)>0
+            raster = np.zeros((480,800,3), dtype=np.uint8)
+            raster[240,:,1:] = 255
+            raster[150:225,active,1:] = 255
+            screen = root / "screen.bmp"
+            Image.fromarray(raster).save(screen)
+            target = root / "report"
+            def editor(source, project_file, count, output):
+                self.assertEqual(source.read_bytes(),screen.read_bytes())
+                project = json.loads(project_file.read_text(encoding="utf-8"))
+                self.assertEqual(count,len(project["objects"]))
+                self.assertEqual(count,3)
+                Image.new("RGB",(800,480),"navy").save(output)
+            with patch("waveform_test.editor_export.export_marked_png",side_effect=editor) as export:
+                with new_run(target) as out:
+                    analyze(csv_path,out,3,.35,.05,1,0,screen)
+            export.assert_called_once()
+            wb = load_workbook(target/"汇总表.xlsx")
+            try:
+                picture, = wb["周期标记"]._images
+                self.assertEqual(picture._data(),(target/"cycle.png").read_bytes())
+            finally:
+                wb.close()
+
     def test_physical_units_and_partial_first_cycle(self):
         with TemporaryDirectory() as tmp:
             demo(Path(tmp))

@@ -4,7 +4,33 @@
 
 同一套程序提供命令行、MCP 和 AI 技能入口。USB 采集适配 **UNI-T UTD2202CEX+ 的 CH1**。其他仪器可导出等间隔采样的 CSV，使用离线分析功能。识别算法面向有明确空闲间隔、重复输出的脉冲序列。
 
-## 五分钟试用
+## 从下载安装到第一份 AI 波形报告
+
+以下步骤在连接示波器的 Windows 电脑上操作。AI 助手需要能运行本地命令，或支持连接本地 MCP 服务。使用 UTD2202CEX+ 实机时，把 USB A–B 数据线接到示波器的 USB 设备口，测量信号接 CH1。
+
+**1. 下载和安装。** 安装 Python 3.10 或更高版本和 NI-VISA。下载源码 ZIP 并解压，在包含 `pyproject.toml` 的目录打开 PowerShell，执行下面三行。最后一行应列出仪器的 USB 地址。如果看到 `[]`，先检查电源、USB 连接和 VISA 驱动。[下载源码 ZIP](https://github.com/mudong-w/waveform-test-tool/archive/refs/heads/main.zip) · [Windows 版 Python](https://www.python.org/downloads/windows/) · [NI-VISA 驱动](https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html)
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install ".[usb,mcp]"
+.\.venv\Scripts\waveform-test.exe devices
+```
+
+原生标记图由插件在后台打开离线标定工具并点击“导出 PNG”生成。Windows 通常可以直接使用已安装的 Edge。也支持 Chrome 或 Chromium；自定义安装位置可通过环境变量 `WAVEFORM_BROWSER` 指定浏览器可执行文件。
+
+**2. 让自己的 AI 调用工具。** 能操作终端的助手，直接告诉它使用本目录的 `.\.venv\Scripts\waveform-test.exe`。使用 MCP 的助手，在客户端新增本地 stdio 服务，服务名填 `waveform-test`，“命令”填下面命令打印的完整路径，参数留空。重新连接后，让 AI 列出示波器，验证它能调用 `list_scopes`。
+
+```powershell
+(Resolve-Path .\.venv\Scripts\waveform-test-mcp.exe).Path
+```
+
+**3. 让 AI 抓波形、标图、出报告。** 核对探头倍率、量程和采样时长，等待屏幕走线铺满并覆盖多个周期。把下面这段复制给 AI：
+
+> 先保存示波器当前的 CH1 长记录和同一帧的原生截图。分析时把截图传给 `--screen`（MCP 使用 `screen_file`），根据空闲电平和脉冲选择阈值。从起始间隔标记一个完整周期，标出 t1、t2 等输出段和整轮 T，右侧保留下一轮的复现。用原版标定工具出图，把同一张图放进 Excel。告诉我各段的峰峰值、脉冲频率和能确认的组重复频率，生成幅频趋势图和文字说明，保存到一个新的测试目录。如果缺少完整周期或复现，告诉我需要补采哪一段。
+
+**4. 查看报告和复核标记。** 打开 `汇总表.xlsx`：“周期标记”工作表嵌入的就是报告目录内的 `cycle.png`，“幅频趋势”工作表对应 `trends.png`。文字说明在 `说明.txt`。如需调整箭头，运行 `.\.venv\Scripts\waveform-test.exe annotate`，先导入报告 `data/` 下的原生截图，再载入同目录的 `标注工程.json`。仅提供 CSV 时，程序生成注明采样重绘的周期图。
+
+## 离线试用合成示例
 
 需要 Python 3.10 或以上版本。在克隆的仓库目录运行下列命令。建议在独立的 Python 虚拟环境中安装。
 
@@ -20,7 +46,7 @@ waveform-test analyze runs/demo/waveform.csv --threshold 3 --out runs/demo-repor
 
 ### 离线标定画图工具
 
-[下载独立标定工具 ZIP](https://github.com/mudong-w/waveform-test-tool/releases/download/v0.1.1/waveform-annotator.zip)，解压后双击 **示波器标定画图工具.html** 即可使用。也可以直接打开源码中的 [HTML 文件](waveform_test/annotator/示波器标定画图工具.html)。安装 Python 插件后，运行 `waveform-test annotate` 打开同一工具，或用 `waveform-test annotate --path` 查看位置。
+[下载独立标定工具 ZIP](https://github.com/mudong-w/waveform-test-tool/releases/latest/download/waveform-annotator.zip)，解压后双击 **示波器标定画图工具.html** 即可使用。也可以直接打开源码中的 [HTML 文件](waveform_test/annotator/示波器标定画图工具.html)。安装 Python 插件后，运行 `waveform-test annotate` 打开同一工具，或用 `waveform-test annotate --path` 查看位置。
 
 使用 `--screen` 分析成功后，先在标定工具里导入报告 `data/` 下的原生截图，再载入同目录的 **标注工程.json**。间隔、t1 等分段和整轮 T 的标记都可以拖动和改字。手动编辑后可导出新的 PNG 和工程 JSON。工程的横轴按实测时间标定；需要测量电压时，可用截图上的电压刻度标定纵轴。[标定工具使用说明](waveform_test/annotator/使用说明.md)
 

@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image as SheetImage
 from .analysis import read_trace, find_cycle, pulse_metrics
@@ -17,7 +17,7 @@ def time_label(seconds):
     return f"{seconds*1000:.1f} ms" if 0 < seconds < .1 else f"{seconds:.1f} s"
 
 
-def mark_screen(path, destination, segments, t, volts, threshold, baseline):
+def screen_project(path, segments, t, volts, threshold, baseline):
     """Match digitized activity to the native 800x480 full-width CH1 display."""
     img = Image.open(path).convert("RGB")
     if img.size != (800,480):
@@ -53,8 +53,6 @@ def mark_screen(path, destination, segments, t, volts, threshold, baseline):
     start,end = pixel(segments[0]["i"]),pixel(segments[-1]["j"])
     if start<0 or end>792 or not actual[end+2:].any():
         raise ValueError("原生截图未容纳完整周期和后续复现")
-    draw = ImageDraw.Draw(img)
-    font = ImageFont.load_default()
     objects = []
     def line(x1,x2,y,label,color):
         objects.append({
@@ -68,20 +66,11 @@ def mark_screen(path, destination, segments, t, volts, threshold, baseline):
             "fontWeight":"600", "italic":False, "textPos":"above",
             "textBgMode":"outline", "textLeader":False,
         })
-        draw.line((x1,y,x2,y), fill=color,width=1)
-        for x in (x1,x2):
-            draw.line((x,y-3,x,y+3),fill=color)
-        box = draw.textbbox((0,0),label,font=font)
-        w = box[2]-box[0]
-        pos = min(798-w,max(1,(x1+x2-w)//2))
-        draw.rectangle((pos-1,y-15,pos+w+1,y-1),fill="black")
-        draw.text((pos,y-16),label,fill=color,font=font)
     for row in segments:
         if row["stage"].startswith("t") or row is segments[0]:
             label = ("gap" if row is segments[0] else row["stage"])+" "+time_label(row["duration_s"])
             line(pixel(row["i"]),pixel(row["j"]),404,label,"#ffc857")
     line(start,end,431,"T = "+time_label(segments[-1]["end_s"]),"#46cbff")
-    img.save(destination)
     dt = (t[-1]-t[0])/(len(t)-1)
     return {"version":2, "objects":objects,
             "calX":{"pxPerUnit":800/(len(t)*dt),"unit":"s","decimals":"1","refVal":1},
@@ -100,7 +89,8 @@ def analyze(csv_path,out,threshold,gap,packet_gap,stages,baseline,screen=None,du
     data.mkdir()
     shutil.copyfile(csv_path,data/"waveform.csv")
     if screen:
-        shutil.copyfile(screen,data/("screen-original"+Path(screen).suffix))
+        raw_screen = data/("screen-original"+Path(screen).suffix)
+        shutil.copyfile(screen,raw_screen)
     rows, freq_points, envelope = [], [], []
     cursor = 0.
     for key,i,j in parts:
@@ -144,8 +134,11 @@ def analyze(csv_path,out,threshold,gap,packet_gap,stages,baseline,screen=None,du
           ((r["stage"],x,y) for r,(xx,yy) in zip(rows,envelope) for x,y in zip(xx,yy)))
     marked = out/"cycle.png"
     if screen:
-        project = mark_screen(screen,marked,rows,t,v,threshold,baseline)
-        write_json(data/"标注工程.json",project)
+        from .editor_export import export_marked_png
+        project = screen_project(raw_screen,rows,t,v,threshold,baseline)
+        project_path = data/"标注工程.json"
+        write_json(project_path,project)
+        export_marked_png(raw_screen,project_path,len(project["objects"]),marked)
     else:
         start,end = parts[0][1],parts[-1][2]
         right = min(len(t),repeat+max(2,round(visible/dt)),repeat+max(2,round(.35*(end-start))))

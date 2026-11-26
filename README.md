@@ -18,6 +18,14 @@ waveform-test analyze runs/demo/waveform.csv --threshold 3 --out runs/demo-repor
 
 ## 从仪器采集
 
+### 离线标定画图工具
+
+[下载独立标定工具 ZIP](https://github.com/mudong-w/waveform-test-tool/releases/download/v0.1.1/waveform-annotator.zip)，解压后双击 **示波器标定画图工具.html** 即可使用。也可以直接打开源码中的 [HTML 文件](waveform_test/annotator/示波器标定画图工具.html)。安装 Python 插件后，运行 `waveform-test annotate` 打开同一工具，或用 `waveform-test annotate --path` 查看位置。
+
+使用 `--screen` 分析成功后，先在标定工具里导入报告 `data/` 下的原生截图，再载入同目录的 **标注工程.json**。间隔、t1 等分段和整轮 T 的标记都可以拖动和改字。手动编辑后可导出新的 PNG 和工程 JSON。工程的横轴按实测时间标定；需要测量电压时，可用截图上的电压刻度标定纵轴。[标定工具使用说明](waveform_test/annotator/使用说明.md)
+
+### USB 连接和采集
+
 在连接示波器的电脑上安装可用的 VISA 后端。该机型开发流程使用 Windows 和 NI-VISA。USB A–B 数据线接示波器设备口。将待测波形接 CH1，在仪器上确认探头倍率和垂直量程，让记录覆盖多个周期。
 
 ```shell

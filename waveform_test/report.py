@@ -55,7 +55,19 @@ def mark_screen(path, destination, segments, t, volts, threshold, baseline):
         raise ValueError("原生截图未容纳完整周期和后续复现")
     draw = ImageDraw.Draw(img)
     font = ImageFont.load_default()
+    objects = []
     def line(x1,x2,y,label,color):
+        objects.append({
+            "id": f"mark-{len(objects)+1}", "kind":"h-arrow",
+            "x1":x1, "x2":x2, "y1":y, "y2":y, "text":label,
+            "textDx":0, "textDy":0, "textBoxW":0, "textBoxH":0,
+            "hidden":False, "locked":False, "autoMeasure":False, "measurePrefix":"",
+            "color":color, "opacity":1, "shaftStyle":"solid", "headShape":"triangle",
+            "arrowEnds":"both", "endTicks":True, "lineWidth":1.5, "arrowSize":5,
+            "fillAlpha":.14, "fontFamily":"sans-serif", "fontSize":12,
+            "fontWeight":"600", "italic":False, "textPos":"above",
+            "textBgMode":"outline", "textLeader":False,
+        })
         draw.line((x1,y,x2,y), fill=color,width=1)
         for x in (x1,x2):
             draw.line((x,y-3,x,y+3),fill=color)
@@ -70,6 +82,10 @@ def mark_screen(path, destination, segments, t, volts, threshold, baseline):
             line(pixel(row["i"]),pixel(row["j"]),404,label,"#ffc857")
     line(start,end,431,"T = "+time_label(segments[-1]["end_s"]),"#46cbff")
     img.save(destination)
+    dt = (t[-1]-t[0])/(len(t)-1)
+    return {"version":2, "objects":objects,
+            "calX":{"pxPerUnit":800/(len(t)*dt),"unit":"s","decimals":"1","refVal":1},
+            "calY":{"pxPerUnit":None,"unit":"V","decimals":"2","refVal":1}}
 
 
 def analyze(csv_path,out,threshold,gap,packet_gap,stages,baseline,screen=None,durations=None):
@@ -128,7 +144,8 @@ def analyze(csv_path,out,threshold,gap,packet_gap,stages,baseline,screen=None,du
           ((r["stage"],x,y) for r,(xx,yy) in zip(rows,envelope) for x,y in zip(xx,yy)))
     marked = out/"cycle.png"
     if screen:
-        mark_screen(screen,marked,rows,t,v,threshold,baseline)
+        project = mark_screen(screen,marked,rows,t,v,threshold,baseline)
+        write_json(data/"标注工程.json",project)
     else:
         start,end = parts[0][1],parts[-1][2]
         right = min(len(t),repeat+max(2,round(visible/dt)),repeat+max(2,round(.35*(end-start))))

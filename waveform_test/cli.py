@@ -8,6 +8,8 @@ def main():
     parser = argparse.ArgumentParser(prog="waveform-test",description="波形测试工具")
     sub = parser.add_subparsers(dest="action",required=True)
     sub.add_parser("devices",help="列出支持的 USB 设备")
+    editor = sub.add_parser("annotate",help="打开离线标定画图工具")
+    editor.add_argument("--path",action="store_true",help="仅显示 HTML 文件位置")
     capture = sub.add_parser("capture",help="保存当前长记录与原生截屏")
     capture.add_argument("--resource")
     demo = sub.add_parser("demo",help="生成合成演示 CSV")
@@ -24,6 +26,16 @@ def main():
     run.add_argument("--durations",type=Path,help="按阶段指定报告时长的 JSON 文件")
     args = parser.parse_args()
     try:
+        if args.action == "annotate":
+            page = Path(__file__).resolve().parent / "annotator" / "示波器标定画图工具.html"
+            if not page.is_file():
+                raise FileNotFoundError(page)
+            print(page)
+            if not args.path:
+                import webbrowser
+                if not webbrowser.open(page.as_uri()):
+                    parser.exit(1, "请用浏览器打开上面的 HTML 文件。\n")
+            return
         if args.action == "devices":
             from .scope import devices
             print(json.dumps(devices()))

@@ -38,7 +38,7 @@ class PulseRecordTest(unittest.TestCase):
             active = np.bincount(columns, weights=np.abs(volts)>=3, minlength=800)>0
             raster = np.zeros((480,800,3), dtype=np.uint8)
             raster[240,:,1:] = 255
-            raster[150:225,active,1:] = 255
+            raster[82:413,active,1:] = 255
             screen = root / "screen.bmp"
             Image.fromarray(raster).save(screen)
             target = root / "report"
@@ -47,6 +47,11 @@ class PulseRecordTest(unittest.TestCase):
                 project = json.loads(project_file.read_text(encoding="utf-8"))
                 self.assertEqual(count,len(project["objects"]))
                 self.assertEqual(count,3)
+                gap,stage,period = project["objects"]
+                self.assertEqual(gap["y1"],stage["y1"])
+                self.assertLess(stage["y1"],82)
+                self.assertLessEqual(period["y1"],436)
+                self.assertGreater(period["y1"],stage["y1"])
                 Image.new("RGB",(800,480),"navy").save(output)
             with patch("waveform_test.editor_export.export_marked_png",side_effect=editor) as export:
                 with new_run(target) as out:

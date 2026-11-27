@@ -4,7 +4,7 @@
 
 ## 安装和启用
 
-在连接仪器的电脑上安装 Python 3.10+、可用的 NI-VISA 和 Edge、Chrome 或 Chromium。下载发行页的 waveform-test-plugin.zip 并解压。在解压目录中运行 `python -m pip install 安装包/waveform_test_tool-0.3.0-py3-none-any.whl`。也可以在解压的仓库根目录运行 `python -m pip install .`。确保客户端可找到该环境中的 `waveform-test-mcp` 可执行文件。[发行下载](https://github.com/mudong-w/waveform-test-tool/releases/latest)
+在连接仪器的电脑上安装 Python 3.10+、可用的 NI-VISA 和 Edge、Chrome 或 Chromium。下载发行页的 waveform-test-plugin.zip 并解压。在解压目录中运行 `python -m pip install 安装包/waveform_test_tool-0.3.1-py3-none-any.whl`。也可以在解压的仓库根目录运行 `python -m pip install .`。确保客户端可找到该环境中的 `waveform-test-mcp` 可执行文件。[发行下载](https://github.com/mudong-w/waveform-test-tool/releases/latest)
 
 插件仓库自带 MCP 配置和波形测试技能。支持本地插件的客户端加载仓库目录后启用 waveform-test。其他 MCP 客户端添加一个本地 stdio 服务，命令填写 `waveform-test-mcp` 或其完整路径，参数留空。工具列表应只有 `run_waveform_test`。启用后按用户请求采集。
 

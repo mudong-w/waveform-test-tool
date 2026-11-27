@@ -59,3 +59,25 @@ def range_label(curve, unit):
     levels = [p[1] for p in curve]
     low, high = min(levels), max(levels)
     return (f"{low:g}" if low == high else f"{low:g}–{high:g}") + " " + unit
+
+
+def describe_profile(points, duration, unit):
+    """Describe holds, ramps and repeated envelopes in time order."""
+    spans = []
+    for (left,start),(right,end) in zip(points,points[1:]):
+        if right <= left:
+            continue
+        width = (right-left)*duration
+        if spans and spans[-1][:2] == (start,end) and abs(width-spans[-1][2])<.05:
+            a,b,w,count = spans[-1]
+            spans[-1] = (a,b,w,count+1)
+        else:
+            spans.append((start,end,width,1))
+    if len(spans)==1 and spans[0][0]==spans[0][1]:
+        return f"{spans[0][0]:g} {unit}"
+    result = []
+    for start,end,width,count in spans:
+        value = f"保持 {start:g} {unit}" if start==end else f"从 {start:g} {'升' if end>start else '降'}至 {end:g} {unit}"
+        repeats = f"（重复 {count} 次）" if count>1 else ""
+        result.append(f"{width*count:.1f} s {value}{repeats}")
+    return "，随后 ".join(result)

@@ -55,7 +55,8 @@ def run_waveform_test(output_directory: str | None = None, resource: str | None 
                     raise ValueError("采样达到 ADC 量程端点，请核对削顶并调整量程补采。")
                 summary = analyze(csv, report, threshold_v, stage_gap_s, packet_gap_s, stages,
                                   baseline_v, screen, durations_file, profile_file,
-                                  volts_per_div=info.get("volts_per_div"))
+                                  volts_per_div=info.get("volts_per_div"),
+                                  peak_detect="PEAKDETECT" in info.get("raw_preamble","").upper().split(","))
             except (ValueError, OSError, RuntimeError, ImportError) as error:
                 result.update(status="needs_review", reason=str(error))
             else:

@@ -158,7 +158,7 @@ def export(out, resource=None):
         if resource is None and len(available) == 1:
             resource = available[0]
         if resource not in available:
-            raise ValueError("请连接支持的设备；多台时用 --resource 指定地址")
+            raise ValueError("请连接支持的设备；多台时指定 resource。当前可选：" + ", ".join(available))
         with rm.open_resource(resource, timeout=5000, write_termination="\n") as scope:
             times, volts, codes, metadata = capture(scope, out / "screen-original.bmp")
     with (out / "waveform.csv").open("w", newline="", encoding="utf-8") as stream:

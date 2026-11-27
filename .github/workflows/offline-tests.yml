@@ -19,8 +19,10 @@ jobs:
           cd "$RUNNER_TEMP"
           waveform-test demo --out demo
           echo '{"t1":{"amplitude_vpp":[[0,20],[1,20]]}}' > profile.json
-          waveform-test analyze demo/waveform.csv --out report --threshold 3 --stages 1 --profile profile.json
-          test -s report/data/reviewed-curves.csv
+          waveform-test run --csv demo/waveform.csv --out report --stages 1 --profile profile.json
+          test -s report/数据/reviewed-curves.csv
+          test -s report/trends.png
+          test -s report/说明.txt
       - uses: actions/upload-artifact@v4
         with:
           name: wheel

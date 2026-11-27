@@ -1,18 +1,12 @@
 ---
 name: waveform-test
-description: 通过波形测试工具读取示波器长记录，复核脉冲的完整周期和复现，输出标记图、幅频趋势、说明和 Excel，或从已存 CSV 离线复算。
+description: 一次调用完成示波器采集或已有波形回放、原生标定、幅度与频率分析，并交付图片、文字说明和 Excel。
 ---
 
-# 波形测试工具
+# 波形测试
 
-本机需要安装仓库中的 waveform-test-tool。调用 `waveform-test --help` 查看入口。连接硬件前先执行 `waveform-test devices`；有多台设备时按用户指定选择。用户请求采集时，将当前长记录保存到新目录，再考虑改变示波器设置。
+用户说“测试波形”“开始捕获”时，调用唯一的 MCP 工具 `run_waveform_test`。未指定输入时直接采集 CH1，默认创建新目录。已有采集可传 csv_file、同帧 screen_file 和 capture_file；已复核的采用值可传 durations_file 与 profile_file。具备终端的客户端也可以执行同一流程 `waveform-test run`。
 
-用 `waveform-test analyze` 读取 CSV。先确认空闲基线和识别阈值，分段间隔取在组内停顿与大段停顿之间。输出以一轮起始间隔为零点，右侧保留复现。检查 JSON 中的复现长度以及图上原始波形的对齐。记录不足时采更长记录；段数已知可用 --stages。连续信号或缺少重复证据时说明限制。
+按[数据规范](../../waveform_test/数据规范.md)核对同帧截图、周期复现、停顿、幅频口径和采用值。长记录分辨不清时说明所需补采条件。没有原生截图的回放会标明采样重绘。
 
-分清峰峰值、组内脉冲频率和组重复频率。采样率不足时要求短时高采样复测。对升频是连续还是阶梯的判断要查看逐脉冲间距；不根据平滑曲线猜测。时长校准通过 --durations 提供经确认的阶段键和值。给出原始周期、采用值与结果目录。对比报告的表格和两张图。
-
-用户要手动标图时，可运行 `waveform-test annotate` 打开离线编辑器。对于带原生截图的报告，依次导入 data/ 中的原始底图和标注工程.json，即可编辑每个周期标记并导出。
-
-采集后分析时，把同帧的 screen-original.bmp 作为 CLI 的 --screen 或 MCP 的 screen_file 传入。程序会调用原版编辑器导出 cycle.png，并将该图嵌入 Excel。仅有 CSV 时，向使用者说明周期图来自采样重绘。
-
-经本次实测复核后，可通过 CLI 的 `--profile` 或 MCP 的 `profile_file` 提供分段幅频控制点。平台、扫频、阶跃使用同一份采用值，实测统计保留在 data/。数据不足时保留测量结果并写明未确认项。
+当 status 为 complete，将 description 及 files 中的周期标记图、幅频趋势图、文字和 Excel 文件直接交给用户；可预览图片时展示两张图。若 status 为 needs_review，说明 reason，给出 data_directory 并使用已保存的数据复核。

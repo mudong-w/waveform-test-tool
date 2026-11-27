@@ -18,7 +18,7 @@ def time_label(seconds):
     return f"{seconds*1000:.1f} ms" if 0 < seconds < .1 else f"{seconds:.1f} s"
 
 
-def screen_project(path, segments, t, volts, threshold, baseline):
+def screen_project(path, segments, t, volts, threshold, baseline, volts_per_div=None):
     """Match digitized activity to the native 800x480 full-width CH1 display."""
     img = Image.open(path).convert("RGB")
     if img.size != (800,480):
@@ -61,27 +61,38 @@ def screen_project(path, segments, t, volts, threshold, baseline):
             "x1":x1, "x2":x2, "y1":y, "y2":y, "text":label,
             "textDx":0, "textDy":0, "textBoxW":0, "textBoxH":0,
             "hidden":False, "locked":False, "autoMeasure":False, "measurePrefix":"",
-            "color":color, "opacity":1, "shaftStyle":"solid", "headShape":"triangle",
-            "arrowEnds":"both", "endTicks":True, "lineWidth":1.5, "arrowSize":5,
-            "fillAlpha":.14, "fontFamily":"sans-serif", "fontSize":12,
+            "color":color, "opacity":1, "shaftStyle":"solid-gap", "headShape":"triangle",
+            "arrowEnds":"both", "endTicks":False, "lineWidth":1.7, "arrowSize":5,
+            "fillAlpha":.14, "fontFamily":"Segoe UI, Microsoft YaHei, sans-serif", "fontSize":12,
             "fontWeight":"600", "italic":False, "textPos":"above",
-            "textBgMode":"outline", "textLeader":False,
+            "textBgMode":"pill", "textLeader":False,
         })
+    colors = ("#46CBFF","#7EE5AE","#FFD475","#D7B8FF")
     for row in segments:
-        if row["stage"].startswith("t") or row is segments[0]:
-            label = ("gap" if row is segments[0] else row["stage"])+" "+time_label(row["duration_s"])
-            line(pixel(row["i"]),pixel(row["j"]),404,label,"#ffc857")
-    line(start,end,431,"T = "+time_label(segments[-1]["end_s"]),"#46cbff")
+        stage = row["stage"]
+        is_gap = stage.startswith("gap")
+        label = ("间隔" if is_gap else stage)+" "+time_label(row["duration_s"])
+        color = "#B8C9D3" if is_gap else colors[(int(stage[1:])-1) % len(colors)]
+        line(pixel(row["i"]),pixel(row["j"]),405,label,color)
+    line(start,end,436,"T = "+time_label(segments[-1]["end_s"]),"#46cbff")
     dt = (t[-1]-t[0])/(len(t)-1)
     return {"version":2, "objects":objects,
             "calX":{"pxPerUnit":800/(len(t)*dt),"unit":"s","decimals":"1","refVal":1},
-            "calY":{"pxPerUnit":None,"unit":"V","decimals":"2","refVal":1}}
+            "calY":{"pxPerUnit":50/volts_per_div if volts_per_div else None,
+                    "unit":"V","decimals":"1","refVal":volts_per_div or 1}}
 
 
-def analyze(csv_path,out,threshold,gap,packet_gap,stages,baseline,screen=None,durations=None,profile=None):
+def analyze(csv_path,out,threshold,gap,packet_gap,stages,baseline,screen=None,durations=None,profile=None,
+            volts_per_div=None):
     if not np.isfinite(packet_gap) or not 0 < packet_gap < gap or (stages is not None and stages<1):
         raise ValueError("组间识别阈值须小于分段阈值；指定段数时必须为正数")
     t,v,dt = read_trace(csv_path)
+    if volts_per_div is not None and (not np.isfinite(volts_per_div) or volts_per_div <= 0):
+        raise ValueError("垂直量程须为有限正数 V/div")
+    if threshold is None:
+        threshold = float(.2 * np.quantile(abs(v-baseline), .999))
+        if threshold == 0:
+            raise ValueError("波形过于稀疏或没有输出，请复核原始数据并指定 threshold_v。")
     parts, repeat, visible = find_cycle(t,v,dt,threshold,gap,stages,baseline)
     settings = json.loads(Path(durations).read_text(encoding="utf-8-sig")) if durations else {}
     if not isinstance(settings,dict) or set(settings)-{p[0] for p in parts}:
@@ -95,6 +106,7 @@ def analyze(csv_path,out,threshold,gap,packet_gap,stages,baseline,screen=None,du
         raw_screen = data/("screen-original"+Path(screen).suffix)
         shutil.copyfile(screen,raw_screen)
     rows, freq_points, envelope = [], [], []
+    packet_envelopes = {}
     cursor = 0.
     for key,i,j in parts:
         measured = (j-i)*dt
@@ -106,9 +118,28 @@ def analyze(csv_path,out,threshold,gap,packet_gap,stages,baseline,screen=None,du
         is_active = key.startswith("t")
         ft,hz,group,packet_hz = pulse_measurements(trace_t,source,dt,threshold,baseline,packet_gap) if is_active else ([],[],None,None)
         curves = profiles.get(key, {})
+        windows = active_windows(source,threshold,baseline,dt,packet_gap) if group is not None else None
         if curves:
-            windows = active_windows(source,threshold,baseline,dt,packet_gap) if group is not None else None
             adopted[key] = {kind: report_points(points,cursor,duration,windows) for kind,points in curves.items()}
+        if windows and "amplitude_vpp" not in curves:
+            # Take both extrema inside a packet. A fixed window crossing its
+            # edge can contain just one polarity and invent an amplitude dip.
+            xx, yy = [cursor], [0.]
+            for left,right in windows:
+                first,last = round(left*len(source)),round(right*len(source))
+                count = max(1,round((last-first)*dt/.1))
+                bounds = np.linspace(first,last,min(last-first,count)+1,dtype=int)
+                xx.append(cursor+duration*left)
+                yy.append(0.)
+                for a,b in zip(bounds,bounds[1:]):
+                    value = float(np.ptp(source[a:b]))
+                    xx.extend((cursor+duration*a/len(source),cursor+duration*b/len(source)))
+                    yy.extend((value,value))
+                xx.append(cursor+duration*right)
+                yy.append(0.)
+            xx.append(cursor+duration)
+            yy.append(0.)
+            packet_envelopes[key] = xx,yy
         # The bin width balances trend detail with enough samples to see both phases.
         bin_size = min(len(source),max(2,round(.1/dt)))
         bins = []
@@ -141,6 +172,9 @@ def analyze(csv_path,out,threshold,gap,packet_gap,stages,baseline,screen=None,du
           ((r["stage"],x,y) for r,(xx,yy) in zip(rows,freq_points) for x,y in zip(xx,yy)))
     table(data/"amplitude.csv",["stage","report_time_s","window_vpp"],
           ((r["stage"],x,y) for r,(xx,yy) in zip(rows,envelope) for x,y in zip(xx,yy)))
+    if packet_envelopes:
+        table(data/"packet-amplitude.csv",["stage","report_time_s","window_vpp"],
+              ((key,x,y) for key,(xx,yy) in packet_envelopes.items() for x,y in zip(xx,yy)))
     if profiles:
         table(data/"reviewed-curves.csv",["stage","quantity","report_time_s","adopted_value"],
               ((name,kind,x,y) for name,curves in adopted.items()
@@ -148,7 +182,7 @@ def analyze(csv_path,out,threshold,gap,packet_gap,stages,baseline,screen=None,du
     marked = out/"cycle.png"
     if screen:
         from .editor_export import export_marked_png
-        project = screen_project(raw_screen,rows,t,v,threshold,baseline)
+        project = screen_project(raw_screen,rows,t,v,threshold,baseline,volts_per_div)
         project_path = data/"标注工程.json"
         write_json(project_path,project)
         export_marked_png(raw_screen,project_path,len(project["objects"]),marked)
@@ -168,11 +202,12 @@ def analyze(csv_path,out,threshold,gap,packet_gap,stages,baseline,screen=None,du
     fig,axes = plt.subplots(2,1,sharex=True,figsize=(10,5),layout="constrained")
     for r,(x,y),(ft,hz) in zip(rows,envelope,freq_points):
         curves = adopted.get(r["stage"], {})
-        if profiles and r["stage"].startswith("gap"):
+        if r["stage"].startswith("gap"):
             for ax,color in zip(axes,["#077d86","#2154a4"]):
                 ax.plot([r["start_s"],r["end_s"]],[0,0],color=color)
         else:
-            axes[0].plot(*curves.get("amplitude_vpp",(x,y)),color="#077d86")
+            amplitude = curves.get("amplitude_vpp",packet_envelopes.get(r["stage"],(x,y)))
+            axes[0].plot(*amplitude,color="#077d86")
             if "frequency_hz" in curves:
                 axes[1].plot(*curves["frequency_hz"],color="#2154a4")
             else:
@@ -192,7 +227,7 @@ def analyze(csv_path,out,threshold,gap,packet_gap,stages,baseline,screen=None,du
             lines.append(f'间隔 {time_label(r["duration_s"])}。')
             continue
         hz,group = r["pulse_hz_median"],r["group_hz"]
-        hz_text = f"脉冲频率中位数 {hz:.0f} Hz" if hz else "可解析的脉冲间距不足"
+        hz_text = f"脉冲频率中位数 {hz:.0f} Hz" if hz else "脉冲频率未确认"
         if r["packet_pulse_hz"] is not None:
             hz_text = f'组内脉冲频率 {r["packet_pulse_hz"]:.0f} Hz'
         group_text = f"，组重复频率 {group:.0f} Hz" if group else ""

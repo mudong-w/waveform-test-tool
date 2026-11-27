@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "waveform-test-tool"
-version = "0.2.1"
+version = "0.3.0"
 description = "波形测试工具 · capture, review and report pulse waveforms"
 requires-python = ">=3.10"
-dependencies = ["numpy>=1.24", "matplotlib>=3.7", "Pillow>=9.5", "openpyxl>=3.1", "websocket-client>=1.7,<2"]
+dependencies = ["numpy>=1.24", "matplotlib>=3.7", "Pillow>=9.5", "openpyxl>=3.1", "websocket-client>=1.7,<2", "pyvisa>=1.13", "mcp>=1.9,<2"]
 [project.optional-dependencies]
 usb = ["pyvisa>=1.13"]
 mcp = ["mcp>=1.9,<2"]
@@ -17,4 +17,4 @@ waveform-test-mcp = "waveform_test.server:main"
 [tool.setuptools]
 packages = ["waveform_test"]
 [tool.setuptools.package-data]
-waveform_test = ["annotator/*.html", "annotator/*.md"]
+waveform_test = ["*.md", "annotator/*.html", "annotator/*.md"]

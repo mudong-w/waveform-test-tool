@@ -1,122 +1,47 @@
 # 波形测试工具
 
-保存示波器当前的长记录，从间隔起点找出一个完整的脉冲输出周期，用下一轮可见的波形复核，再生成周期标记图、幅度与频率趋势、文字说明和带图的 Excel 汇总表。
+连接 UNI-T UTD2202CEX+ 的 CH1，让屏幕铺满多个周期。启用插件后说 **“测试这个波形，把标记图、幅频图和说明给我”**。插件通过一个工具 `run_waveform_test` 获取长记录和同帧截图，调用内置原版标定页导出周期标记图，处理幅度和频率，最后返回文字及文件路径。
 
-同一套程序提供命令行、MCP 和 AI 技能入口。USB 采集适配 **UNI-T UTD2202CEX+ 的 CH1**。其他仪器可导出等间隔采样的 CSV，使用离线分析功能。识别算法面向有明确空闲间隔、重复输出的脉冲序列。
+## 安装和启用
 
-## 从下载安装到第一份 AI 波形报告
+在连接仪器的电脑上安装 Python 3.10+、可用的 NI-VISA 和 Edge、Chrome 或 Chromium。下载发行页的 waveform-test-plugin.zip 并解压。在解压目录中运行 `python -m pip install 安装包/waveform_test_tool-0.3.0-py3-none-any.whl`。也可以在解压的仓库根目录运行 `python -m pip install .`。确保客户端可找到该环境中的 `waveform-test-mcp` 可执行文件。[发行下载](https://github.com/mudong-w/waveform-test-tool/releases/latest)
 
-以下步骤在连接示波器的 Windows 电脑上操作。AI 助手需要能运行本地命令，或支持连接本地 MCP 服务。使用 UTD2202CEX+ 实机时，把 USB A–B 数据线接到示波器的 USB 设备口，测量信号接 CH1。
+插件仓库自带 MCP 配置和波形测试技能。支持本地插件的客户端加载仓库目录后启用 waveform-test。其他 MCP 客户端添加一个本地 stdio 服务，命令填写 `waveform-test-mcp` 或其完整路径，参数留空。工具列表应只有 `run_waveform_test`。启用后按用户请求采集。
 
-**1. 下载和安装。** 安装 Python 3.10 或更高版本和 NI-VISA。下载源码 ZIP 并解压，在包含 `pyproject.toml` 的目录打开 PowerShell，执行下面三行。最后一行应列出仪器的 USB 地址。如果看到 `[]`，先检查电源、USB 连接和 VISA 驱动。[下载源码 ZIP](https://github.com/mudong-w/waveform-test-tool/archive/refs/heads/main.zip) · [Windows 版 Python](https://www.python.org/downloads/windows/) · [NI-VISA 驱动](https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html)
-
-```powershell
-py -m venv .venv
-.\.venv\Scripts\python.exe -m pip install ".[usb,mcp]"
-.\.venv\Scripts\waveform-test.exe devices
-```
-
-原生标记图由插件在后台打开离线标定工具并点击“导出 PNG”生成。Windows 通常可以直接使用已安装的 Edge。也支持 Chrome 或 Chromium；自定义安装位置可通过环境变量 `WAVEFORM_BROWSER` 指定浏览器可执行文件。
-
-**2. 让自己的 AI 调用工具。** 能操作终端的助手，直接告诉它使用本目录的 `.\.venv\Scripts\waveform-test.exe`。使用 MCP 的助手，在客户端新增本地 stdio 服务，服务名填 `waveform-test`，“命令”填下面命令打印的完整路径，参数留空。重新连接后，让 AI 列出示波器，验证它能调用 `list_scopes`。
-
-```powershell
-(Resolve-Path .\.venv\Scripts\waveform-test-mcp.exe).Path
-```
-
-**3. 让 AI 抓波形、标图、出报告。** 核对探头倍率、量程和采样时长，等待屏幕走线铺满并覆盖多个周期。把下面这段复制给 AI：
-
-> 先保存示波器当前的 CH1 长记录和同一帧的原生截图。分析时把截图传给 `--screen`（MCP 使用 `screen_file`），根据空闲电平和脉冲选择阈值。从起始间隔标记一个完整周期，标出 t1、t2 等输出段和整轮 T，右侧保留下一轮的复现。用原版标定工具出图，把同一张图放进 Excel。告诉我各段的峰峰值、脉冲频率和能确认的组重复频率，生成幅频趋势图和文字说明，保存到一个新的测试目录。如果缺少完整周期或复现，告诉我需要补采哪一段。
-
-**4. 查看报告和复核标记。** 打开 `汇总表.xlsx`：“周期标记”工作表嵌入的就是报告目录内的 `cycle.png`，“幅频趋势”工作表对应 `trends.png`。文字说明在 `说明.txt`。如需调整箭头，运行 `.\.venv\Scripts\waveform-test.exe annotate`，先导入报告 `data/` 下的原生截图，再载入同目录的 `标注工程.json`。仅提供 CSV 时，程序生成注明采样重绘的周期图。
-
-## 离线试用合成示例
-
-需要 Python 3.10 或以上版本。在克隆的仓库目录运行下列命令。建议在独立的 Python 虚拟环境中安装。
+## 一次运行
 
 ```shell
-python -m pip install .
-waveform-test demo --out runs/demo
-waveform-test analyze runs/demo/waveform.csv --threshold 3 --out runs/demo-report
+waveform-test run --out runs/test-01
 ```
 
-示例由程序合成。每轮 4 s，组内脉冲 100 Hz，脉冲组每秒重复 5 次，双极性输出为 20 Vpp。记录从一段间隔的中途开始，用于检验程序能否跳过残段。运行后打开 `runs/demo-report/汇总表.xlsx`。
+默认选择唯一受支持的设备，冻结并保存 CH1 和同帧原生截图，恢复采集状态并完成报告。也可指定 `--resource`。默认识别阈值为相对基线的绝对电压第 99.9 百分位的 20%，实际阈值写入报告数据。用 `--threshold`、`--baseline`、`--stage-gap`、`--packet-gap` 和 `--stages` 可按波形调整。自动周期识别适用于具有可辨空闲间隔和可见复现的重复脉冲列。
 
-对已确认的分组输出，插件按每个完整内部脉冲组的首末脉冲间距估算组内平均频率，再取各组的中位数。这样可以减小采样点取整带来的偏差。参数表分别列出组内脉冲频率、组重复频率和逐脉冲频率中位数。逐脉冲记录可用于检查扫频或组内变化。
-
-## 从仪器采集
-
-### 离线标定画图工具
-
-[下载独立标定工具 ZIP](https://github.com/mudong-w/waveform-test-tool/releases/latest/download/waveform-annotator.zip)，解压后双击 **示波器标定画图工具.html** 即可使用。也可以直接打开源码中的 [HTML 文件](waveform_test/annotator/示波器标定画图工具.html)。安装 Python 插件后，运行 `waveform-test annotate` 打开同一工具，或用 `waveform-test annotate --path` 查看位置。
-
-使用 `--screen` 分析成功后，先在标定工具里导入报告 `data/` 下的原生截图，再载入同目录的 **标注工程.json**。间隔、t1 等分段和整轮 T 的标记都可以拖动和改字。手动编辑后可导出新的 PNG 和工程 JSON。工程的横轴按实测时间标定；需要测量电压时，可用截图上的电压刻度标定纵轴。[标定工具使用说明](waveform_test/annotator/使用说明.md)
-
-### USB 连接和采集
-
-在连接示波器的电脑上安装可用的 VISA 后端。该机型开发流程使用 Windows 和 NI-VISA。USB A–B 数据线接示波器设备口。将待测波形接 CH1，在仪器上确认探头倍率和垂直量程，让记录覆盖多个周期。
+已有记录使用同一个入口。采集器标准目录中的 waveform.csv 会自动配对同目录的 screen-original.bmp 和 capture.json。其他命名请显式指定：
 
 ```shell
-python -m pip install ".[usb]"
-waveform-test devices
-waveform-test capture --out runs/capture-01
-waveform-test analyze runs/capture-01/waveform.csv --screen runs/capture-01/screen-original.bmp --threshold 3 --out runs/report-01
+waveform-test run --csv trace.csv --screen same-frame.bmp --capture-file capture.json --out runs/replay
 ```
 
-`capture` 冻结当前采集，读取原生 BMP、波形字节与换算系数，保存时间、电压和 ADC 码，随后恢复波形传输配置与原运行状态。该适配器使用仪器当前的 RAW 读取范围。检查 `capture.json` 的点数、记录时长、ADC 满量程样本数及 ASCII 电压交叉检查结果。多台设备可加 `--resource` 指定枚举得到的地址。需要选用特定 VISA 库时可设置环境变量 `WAVEFORM_VISA_LIBRARY`。
+仅有 CSV 时周期图标明采样重绘。驱动标定页的浏览器可用环境变量 `WAVEFORM_BROWSER` 指定。原生图使用内置的[示波器标定画图工具](waveform_test/annotator/示波器标定画图工具.html)导出，报告中的标注工程可在同一编辑器中重新打开。
 
-原生标记目前适用于 **800 × 480、全宽时间轴、青色 CH1** 的同帧图像。程序检查屏幕活动边缘和采样边缘是否对齐；校准失败时给出原因。省略 `--screen` 可以单独复核采样数据，周期图会明确显示为采样重绘。
+## 数据规范与采用值
 
-## 分析判断与参数
-
-1. **先保存长记录。** 标记从完整起始间隔到下一轮相同位置的一轮，右侧应看到下一轮开始输出。当前算法从最长的重复段间停顿选起点，检查复现段的持续时间、活动占比和幅度。没有明显起始间隔、连续正弦或每轮次序改变的波形，需要人工判断。对称子周期可能有多种解释，可按已知协议指定 `--stages 4`。
-2. **分开三个时间尺度。** `--threshold` 是相对空闲基线的活动阈值（V），基线可用 `--baseline` 指定。`--stage-gap` 是区分两个输出段的最短静默时间（默认 0.35 s）。`--packet-gap` 是区分两个脉冲组的最小同极性脉冲间距（默认 0.05 s）。根据被测信号选择阈值，避免把低频脉冲拆成单独的组。
-3. **分别看幅度和两种频率。** 幅度趋势为 0.1 s 窗内峰峰值，分段表保留整段极值。频率散点由同极性阈值上跳的相邻脉冲间距计算，组间停顿会断开频率点。组重复频率取相邻脉冲组起点的间距。脉冲频率中位采样间距少于 4 个样点时，程序省略该段脉冲频率。削顶、噪声、混叠和脉冲漏采都可能影响结果，应以较高采样率的局部记录复核；不能仅凭稀疏数据区分线性扫频和小台阶。
-4. **保留实测值，统一报告值。** 每段采用时长默认等于实测时长。比如经复核希望 t3 采用 20.0 s，新建 UTF-8 文件 `durations.json`，内容为 `{"t3": 20.0}`，运行分析时加 `--durations durations.json`。程序重算所有后续时间点和整轮周期。原生图上箭头仍对准实际边缘，趋势图按采用时长映射。显示四舍五入不影响数据文件的精度。
-5. **检查交付。** 确认周期起点、右侧复现、幅度单位和频率含义，再核对 Excel 中的参数及两张图。每次写入新的输出目录。
-
-## 复核后的幅频曲线
-
-在有独立测量依据时，可用 `--profile profile.json` 指定各输出段的幅度或脉冲频率。MCP 的对应参数为 `profile_file`。以下是合成示例，数值仅用于演示格式。
+[数据规范](waveform_test/数据规范.md)随源码和安装包发布，覆盖测量口径、分段与复现、同排标记、双栏趋势和交付核对。用 `--durations` 传入已复核的时长，例如 `{"gap1":1.0,"t1":3.0}`。经复核的幅频曲线用 `--profile` 提供，例如下列合成平台。MCP 对应参数为 durations_file 和 profile_file。
 
 ```json
 {"t1":{"amplitude_vpp":[[0,20],[1,20]],"frequency_hz":[[0,100],[1,100]]}}
 ```
 
-每个点依次为段内进度（0 至 1）和采用值（Vpp 或 Hz）。两个等值点表示平台，不同值用直线连接，同一进度的两个不同值表示阶跃。各曲线跟随该段的采用时长缩放。已确认的脉冲组保留组间停顿。缺少采用曲线的量继续展示实测结果。
+逐脉冲频率、组内脉冲频率、组重复频率分别保存。提供采用值时，图、表和文字共用该组参数，保留实测与组间停顿。只提供原始采样时，趋势显示测量结果。已确认的分组波形在每组内取峰峰值并保留静默，长组分窗统计，原始逐窗证据同时保留。未确认的名义参数需要另行复核。
 
-报告沿用两栏趋势图。原始 CSV、逐窗峰峰值和脉冲间距频率保留在 `data/`，采用曲线的完整趋势点另存为 `data/reviewed-curves.csv`。Excel 的「幅频采用值」页保存所给控制点。请按本次信号核定数值。
-
-## 输出文件
+## 用户收到的结果
 
 | 文件 | 内容 |
 |---|---|
-| `cycle.png` | 单周期标记与后续复现。使用原生截图或明确注明的采样重绘 |
-| `trends.png` | 完整周期的幅度、脉冲频率及 t1、t2 等分段 |
-| `说明.txt`、`汇总表.xlsx` | 分段说明、采用与实测时长、幅度和频率、内嵌图 |
-| `data/` | 原始 CSV、输入的原生截图、分段表、趋势点和带识别参数的 JSON |
+| cycle.png | 一轮原生周期标记及右侧复现，或注明来源的采样重绘 |
+| trends.png | 整轮幅度与脉冲频率 |
+| 说明.txt | 分段时长、幅度、频率及可确认的组重复频率 |
+| 汇总表.xlsx | 参数和与交付图一致的内嵌图 |
+| 数据/ | 原始采样、同帧底图、采集参数（如有）、标注工程和实测统计 |
 
-自己的 CSV 使用 UTF-8 编码，至少包含 `time_s,CH1_V` 两列，分别为秒和伏特，采样时间严格递增且等间隔。其他列可以保留。
-
-## 供其他 AI 使用
-
-**MCP 客户端**可以通过本机标准输入输出调用工具。执行 `python -m pip install ".[usb,mcp]"`，在客户端的 MCP 配置中添加下例；如果客户端不能继承终端的 PATH，将 command 改成虚拟环境中该可执行文件的绝对路径。
-
-```json
-{
-  "mcpServers": {
-    "waveform-test": {
-      "command": "waveform-test-mcp",
-      "args": []
-    }
-  }
-}
-```
-
-MCP 提供 `list_scopes`、`capture_record` 和 `analyze_record`。传入的是运行服务那台电脑上的文件路径。导入 CSV 做离线分析时，仅需安装 `.[mcp]`。支持 Agent Skills 的助手可以加载 [波形测试技能](skills/waveform-test/SKILL.md)。使用 Claude Code 时也可从本地克隆目录运行 `claude --plugin-dir .`。可执行命令的其他 AI 可以直接使用 CLI。
-
-给助手的示例请求：**“读取我保存的长记录，先确认一个完整周期和下一轮复现，再按 t1、t2 标记。把两张图、分段表和文字说明存进一个新目录。”**
-
-## 许可
-
-MIT。仓库示例为合成信号。VISA 驱动由使用者从相应厂商安装。
+MCP 直接返回说明正文和四个文件的绝对路径。周期复现不足或原生标定失败时，返回需要复核的原因并保留已取得的原始记录。已有命令行脚本仍可调用单步子命令，面向用户的工作流始终使用 `run`。许可为 MIT。

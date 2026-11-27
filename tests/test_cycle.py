@@ -5,10 +5,25 @@ import unittest
 from unittest.mock import patch
 import numpy as np
 from waveform_test.demo import demo
-from waveform_test.analysis import read_trace, find_cycle, pulse_metrics
+from waveform_test.analysis import read_trace, find_cycle, pulse_metrics, pulse_measurements
 
 
 class PulseRecordTest(unittest.TestCase):
+    def test_packet_average_reduces_sample_grid_bias(self):
+        dt = .001
+        samples = np.arange(1600)
+        voltage = np.zeros(len(samples))
+        for start in range(0, 1500, 150):
+            edges = start + np.rint(np.arange(15)*7.4).astype(int)
+            voltage[edges] = 4
+        _, intervals, repetition, pulse = pulse_measurements(samples*dt, voltage, dt, 2, 0, .025)
+        expected = 1/(7.4*dt)
+        self.assertGreater(abs(np.median(intervals)-expected), 5)
+        self.assertAlmostEqual(pulse, expected, delta=1)
+        self.assertAlmostEqual(repetition, 1/.15)
+        continuous = np.where(samples % 8 == 0, 4, 0)
+        self.assertEqual(pulse_measurements(samples*dt, continuous, dt, 2, 0, .025)[2:], (None, None))
+
     def test_native_report_embeds_editor_output_verbatim(self):
         from PIL import Image
         from openpyxl import load_workbook

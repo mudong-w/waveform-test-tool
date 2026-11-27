@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image as SheetImage
-from .analysis import read_trace, find_cycle, pulse_metrics
+from .analysis import read_trace, find_cycle, pulse_measurements
 from .storage import write_json
 from .profiles import active_windows, range_label, read_profiles, report_points
 
@@ -104,7 +104,7 @@ def analyze(csv_path,out,threshold,gap,packet_gap,stages,baseline,screen=None,du
         source = v[i:j]
         trace_t = t[i:j]
         is_active = key.startswith("t")
-        ft,hz,group = pulse_metrics(trace_t,source,dt,threshold,baseline,packet_gap) if is_active else ([],[],None)
+        ft,hz,group,packet_hz = pulse_measurements(trace_t,source,dt,threshold,baseline,packet_gap) if is_active else ([],[],None,None)
         curves = profiles.get(key, {})
         if curves:
             windows = active_windows(source,threshold,baseline,dt,packet_gap) if group is not None else None
@@ -122,7 +122,7 @@ def analyze(csv_path,out,threshold,gap,packet_gap,stages,baseline,screen=None,du
                          end_s=cursor+duration,duration_s=duration,min_v=float(min(source)),
                          max_v=float(max(source)),vpp=float(np.ptp(source)),
                          pulse_hz_median=float(np.median(hz)) if hz else None,
-                         group_hz=group,frequency_intervals=len(hz)))
+                         group_hz=group,frequency_intervals=len(hz),packet_pulse_hz=packet_hz))
         cursor += duration
     report = dict(measured_period_s=sum(r["measured_s"] for r in rows),period_s=cursor,
                   visible_next_output_s=visible,sample_rate_hz=1/dt,threshold_v=threshold,
@@ -193,6 +193,8 @@ def analyze(csv_path,out,threshold,gap,packet_gap,stages,baseline,screen=None,du
             continue
         hz,group = r["pulse_hz_median"],r["group_hz"]
         hz_text = f"脉冲频率中位数 {hz:.0f} Hz" if hz else "可解析的脉冲间距不足"
+        if r["packet_pulse_hz"] is not None:
+            hz_text = f'组内脉冲频率 {r["packet_pulse_hz"]:.0f} Hz'
         group_text = f"，组重复频率 {group:.0f} Hz" if group else ""
         curves = profiles.get(r["stage"], {})
         amp_text = f'峰峰值 {r["vpp"]:.0f} Vpp'
@@ -206,11 +208,11 @@ def analyze(csv_path,out,threshold,gap,packet_gap,stages,baseline,screen=None,du
     ws = wb.active
     ws.title = "参数"
     ws.append(["周期 (s)",cursor,"实测周期 (s)",report["measured_period_s"]])
-    ws.append(["阶段","起始 (s)","结束 (s)","采用时长 (s)","实测时长 (s)","峰峰值 (Vpp)","脉冲频率中位数 (Hz)","组重复频率 (Hz)"])
-    keys = ["stage","start_s","end_s","duration_s","measured_s","vpp","pulse_hz_median","group_hz"]
+    ws.append(["阶段","起始 (s)","结束 (s)","采用时长 (s)","实测时长 (s)","峰峰值 (Vpp)","逐脉冲频率中位数 (Hz)","组重复频率 (Hz)","组内脉冲频率 (Hz)"])
+    keys = ["stage","start_s","end_s","duration_s","measured_s","vpp","pulse_hz_median","group_hz","packet_pulse_hz"]
     for r in rows:
         ws.append([r[k] for k in keys])
-    for col in "ABCDEFGH":
+    for col in "ABCDEFGHI":
         ws.column_dimensions[col].width=23
     for name,path in [("周期标记",marked),("幅频趋势",trend)]:
         sheet = wb.create_sheet(name)

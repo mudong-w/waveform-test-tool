@@ -77,7 +77,7 @@ def find_cycle(t, v, dt, threshold, gap, stages, baseline):
     raise ValueError("未确认从间隔开始的完整周期及可见复现。检查长记录、分段间隔和每轮段数")
 
 
-def pulse_metrics(t,v,dt,threshold,baseline,packet_gap):
+def pulse_measurements(t,v,dt,threshold,baseline,packet_gap):
     # One polarity avoids double-counting the two phases of bipolar pulses.
     y = v-baseline
     polarity = 1 if np.max(y) >= abs(np.min(y))*.8 else -1
@@ -86,7 +86,7 @@ def pulse_metrics(t,v,dt,threshold,baseline,packet_gap):
     times = t[events]
     delta = np.diff(times)
     if not len(delta):
-        return [], [], None
+        return [], [], None, None
     packets = np.split(times,np.flatnonzero(delta >= packet_gap)+1)
     within = delta < packet_gap
     if np.any(within) and np.median(delta[within]) < 4*dt*(1-1e-5):
@@ -94,8 +94,19 @@ def pulse_metrics(t,v,dt,threshold,baseline,packet_gap):
     f_t = ((times[:-1]+times[1:])/2)[within]
     hz = 1/delta[within]
     group_hz = None
+    packet_pulse_hz = None
     if len(packets)>=3 and all(len(p)>=2 for p in packets[1:-1]):
         periods = np.diff([p[0] for p in packets])
         if np.max(abs(periods-np.median(periods))) <= .2*np.median(periods):
             group_hz = float(1/np.median(periods))
-    return f_t.tolist(), hz.tolist(), group_hz
+            # End packets can be clipped. Spanning several intervals reduces
+            # edge quantization without counting the silent part of a packet.
+            rates = [(len(p)-1)/(p[-1]-p[0]) for p in packets[1:-1] if len(p)>=3]
+            if hz.size and rates:
+                packet_pulse_hz = float(np.median(rates))
+    return f_t.tolist(), hz.tolist(), group_hz, packet_pulse_hz
+
+
+def pulse_metrics(t,v,dt,threshold,baseline,packet_gap):
+    """Return interval samples and the packet repetition rate."""
+    return pulse_measurements(t,v,dt,threshold,baseline,packet_gap)[:3]

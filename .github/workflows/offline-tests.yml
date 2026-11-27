@@ -1,0 +1,27 @@
+name: Offline tests
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  synthetic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install ".[mcp]" build
+      - run: python -m unittest discover -s tests -v
+      - run: python -m build --wheel
+      - name: Check installed CLI with synthetic data
+        run: |
+          python -m pip install --no-deps --force-reinstall dist/*.whl
+          cd "$RUNNER_TEMP"
+          waveform-test demo --out demo
+          echo '{"t1":{"amplitude_vpp":[[0,20],[1,20]]}}' > profile.json
+          waveform-test analyze demo/waveform.csv --out report --threshold 3 --stages 1 --profile profile.json
+          test -s report/data/reviewed-curves.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel
+          path: dist/*.whl

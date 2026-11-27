@@ -11,6 +11,7 @@ from openpyxl import Workbook
 from openpyxl.drawing.image import Image as SheetImage
 from .analysis import read_trace, find_cycle, pulse_metrics
 from .storage import write_json
+from .profiles import active_windows, range_label, read_profiles, report_points
 
 
 def time_label(seconds):
@@ -77,7 +78,7 @@ def screen_project(path, segments, t, volts, threshold, baseline):
             "calY":{"pxPerUnit":None,"unit":"V","decimals":"2","refVal":1}}
 
 
-def analyze(csv_path,out,threshold,gap,packet_gap,stages,baseline,screen=None,durations=None):
+def analyze(csv_path,out,threshold,gap,packet_gap,stages,baseline,screen=None,durations=None,profile=None):
     if not np.isfinite(packet_gap) or not 0 < packet_gap < gap or (stages is not None and stages<1):
         raise ValueError("组间识别阈值须小于分段阈值；指定段数时必须为正数")
     t,v,dt = read_trace(csv_path)
@@ -85,6 +86,8 @@ def analyze(csv_path,out,threshold,gap,packet_gap,stages,baseline,screen=None,du
     settings = json.loads(Path(durations).read_text(encoding="utf-8-sig")) if durations else {}
     if not isinstance(settings,dict) or set(settings)-{p[0] for p in parts}:
         raise ValueError("时长校准键应与当前 gap1、t1 等阶段一致")
+    profiles = read_profiles(profile, [key for key,_,_ in parts if key.startswith("t")])
+    adopted = {}
     data = out/"data"
     data.mkdir()
     shutil.copyfile(csv_path,data/"waveform.csv")
@@ -102,6 +105,10 @@ def analyze(csv_path,out,threshold,gap,packet_gap,stages,baseline,screen=None,du
         trace_t = t[i:j]
         is_active = key.startswith("t")
         ft,hz,group = pulse_metrics(trace_t,source,dt,threshold,baseline,packet_gap) if is_active else ([],[],None)
+        curves = profiles.get(key, {})
+        if curves:
+            windows = active_windows(source,threshold,baseline,dt,packet_gap) if group is not None else None
+            adopted[key] = {kind: report_points(points,cursor,duration,windows) for kind,points in curves.items()}
         # The bin width balances trend detail with enough samples to see both phases.
         bin_size = min(len(source),max(2,round(.1/dt)))
         bins = []
@@ -121,6 +128,8 @@ def analyze(csv_path,out,threshold,gap,packet_gap,stages,baseline,screen=None,du
                   visible_next_output_s=visible,sample_rate_hz=1/dt,threshold_v=threshold,
                   baseline_v=baseline,stage_gap_s=gap,packet_gap_s=packet_gap,overrides=settings,
                   screen_source="instrument" if screen else "samples",segments=rows)
+    if profiles:
+        report["reviewed_profiles"] = profiles
     write_json(data/"report.json",report)
     def table(file,headers,items):
         with file.open("w",newline="",encoding="utf-8-sig") as stream:
@@ -132,6 +141,10 @@ def analyze(csv_path,out,threshold,gap,packet_gap,stages,baseline,screen=None,du
           ((r["stage"],x,y) for r,(xx,yy) in zip(rows,freq_points) for x,y in zip(xx,yy)))
     table(data/"amplitude.csv",["stage","report_time_s","window_vpp"],
           ((r["stage"],x,y) for r,(xx,yy) in zip(rows,envelope) for x,y in zip(xx,yy)))
+    if profiles:
+        table(data/"reviewed-curves.csv",["stage","quantity","report_time_s","adopted_value"],
+              ((name,kind,x,y) for name,curves in adopted.items()
+               for kind,(xx,yy) in curves.items() for x,y in zip(xx,yy)))
     marked = out/"cycle.png"
     if screen:
         from .editor_export import export_marked_png
@@ -154,18 +167,26 @@ def analyze(csv_path,out,threshold,gap,packet_gap,stages,baseline,screen=None,du
         plt.close(fig)
     fig,axes = plt.subplots(2,1,sharex=True,figsize=(10,5),layout="constrained")
     for r,(x,y),(ft,hz) in zip(rows,envelope,freq_points):
-        axes[0].plot(x,y,color="#077d86")
-        axes[1].scatter(ft,hz,s=4,color="#2154a4")
+        curves = adopted.get(r["stage"], {})
+        if profiles and r["stage"].startswith("gap"):
+            for ax,color in zip(axes,["#077d86","#2154a4"]):
+                ax.plot([r["start_s"],r["end_s"]],[0,0],color=color)
+        else:
+            axes[0].plot(*curves.get("amplitude_vpp",(x,y)),color="#077d86")
+            if "frequency_hz" in curves:
+                axes[1].plot(*curves["frequency_hz"],color="#2154a4")
+            else:
+                axes[1].scatter(ft,hz,s=4,color="#2154a4")
         if r["stage"].startswith("t"):
             for ax in axes:
                 ax.axvspan(r["start_s"],r["end_s"],color="#4982ac",alpha=.08)
             axes[0].text((r["start_s"]+r["end_s"])/2,.98,r["stage"],transform=axes[0].get_xaxis_transform(),ha="center",va="top")
-    axes[0].set_ylabel("Window Vpp (V)")
+    axes[0].set_ylabel("Amplitude (Vpp)")
     axes[1].set(ylabel="Pulse frequency (Hz)",xlabel="Cycle time (s)",xlim=(0,cursor))
     trend = out/"trends.png"
     fig.savefig(trend,dpi=135)
     plt.close(fig)
-    lines = [f"每轮 {time_label(cursor)}，实测周期 {report['measured_period_s']:.4f} s。"]
+    lines = [f"每轮 {time_label(cursor)}。"]
     for r in rows:
         if r["stage"].startswith("gap"):
             lines.append(f'间隔 {time_label(r["duration_s"])}。')
@@ -173,7 +194,13 @@ def analyze(csv_path,out,threshold,gap,packet_gap,stages,baseline,screen=None,du
         hz,group = r["pulse_hz_median"],r["group_hz"]
         hz_text = f"脉冲频率中位数 {hz:.0f} Hz" if hz else "可解析的脉冲间距不足"
         group_text = f"，组重复频率 {group:.0f} Hz" if group else ""
-        lines.append(f'{r["stage"]} 输出 {time_label(r["duration_s"])}，峰峰值 {r["vpp"]:.0f} Vpp，{hz_text}{group_text}。')
+        curves = profiles.get(r["stage"], {})
+        amp_text = f'峰峰值 {r["vpp"]:.0f} Vpp'
+        if "amplitude_vpp" in curves:
+            amp_text = "采用峰峰值 " + range_label(curves["amplitude_vpp"],"Vpp")
+        if "frequency_hz" in curves:
+            hz_text = "采用脉冲频率 " + range_label(curves["frequency_hz"],"Hz")
+        lines.append(f'{r["stage"]} 输出 {time_label(r["duration_s"])}，{amp_text}，{hz_text}{group_text}。')
     (out/"说明.txt").write_text("\n".join(lines)+"\n",encoding="utf-8-sig")
     wb = Workbook()
     ws = wb.active
@@ -188,5 +215,15 @@ def analyze(csv_path,out,threshold,gap,packet_gap,stages,baseline,screen=None,du
     for name,path in [("周期标记",marked),("幅频趋势",trend)]:
         sheet = wb.create_sheet(name)
         sheet.add_image(SheetImage(str(path)),"A1")
+    if profiles:
+        sheet = wb.create_sheet("幅频采用值")
+        sheet.append(["阶段","量","段内进度","周期内时间 (s)","采用值","单位"])
+        for row in rows:
+            for kind,points in profiles.get(row["stage"],{}).items():
+                for fraction,value in points:
+                    sheet.append([row["stage"],kind,fraction,row["start_s"]+fraction*row["duration_s"],
+                                  value,"Vpp" if kind=="amplitude_vpp" else "Hz"])
+        for col in "ABCDEF":
+            sheet.column_dimensions[col].width = 21
     wb.save(out/"汇总表.xlsx")
     return {k:v for k,v in report.items() if k!="segments"}

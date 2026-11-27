@@ -33,8 +33,9 @@ def find_cycle(t, v, dt, threshold, gap, stages, baseline):
         raise ValueError("至少需要两个完整间隔和下一轮输出，请延长记录或检查阈值")
     def close(a,b):
         return abs(a-b) <= max(4*dt,.10*max(a,b))
+    longest = float(np.max(gaps))
     for i, pause in enumerate(gaps):
-        if not close(pause, max(gaps)):
+        if not close(pause, longest):
             continue
         candidates = [i+stages] if stages is not None else range(i+1,len(gaps))
         for j in candidates:
@@ -64,6 +65,8 @@ def find_cycle(t, v, dt, threshold, gap, stages, baseline):
                     if abs(p-q) > .25 or abs(np.max(abs(u))-np.max(abs(w))) > max(threshold,.3*max(np.max(abs(u)),np.max(abs(w)))):
                         ok = False
                         break
+                if not ok:
+                    break
             recurrence = (spans[j+1][1]-spans[j+1][0])*dt
             if ok and recurrence >= min(.25,.5*(spans[i+1][1]-spans[i+1][0])*dt):
                 parts = []

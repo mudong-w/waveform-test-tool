@@ -11,10 +11,10 @@ server = FastMCP("波形测试工具")
 def analyze_record(csv_file: str, output_directory: str, threshold_v: float, stage_gap_s: float = .35,
                    packet_gap_s: float = .05, stages: int | None = None,
                    baseline_v: float = 0, screen_file: str | None = None,
-                   durations_file: str | None = None) -> dict:
+                   durations_file: str | None = None, profile_file: str | None = None) -> dict:
     """Analyze a local pulse CSV and save a report to a new directory. Paths belong to the server machine."""
     with new_run(output_directory) as out:
-        return analyze(Path(csv_file),out,threshold_v,stage_gap_s,packet_gap_s,stages,baseline_v,screen_file,durations_file)
+        return analyze(Path(csv_file),out,threshold_v,stage_gap_s,packet_gap_s,stages,baseline_v,screen_file,durations_file,profile_file)
 
 
 @server.tool()

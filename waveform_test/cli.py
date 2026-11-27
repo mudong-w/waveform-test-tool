@@ -24,6 +24,7 @@ def main():
     run.add_argument("--stages",type=int,help="每轮输出段数")
     run.add_argument("--screen",type=Path,help="同一次采集的全宽 800x480 原生截图")
     run.add_argument("--durations",type=Path,help="按阶段指定报告时长的 JSON 文件")
+    run.add_argument("--profile",type=Path,help="经复核的分段幅频曲线 JSON，横坐标为段内进度 0 到 1")
     args = parser.parse_args()
     try:
         if args.action == "annotate":
@@ -49,7 +50,7 @@ def main():
                 demo(out)
             else:
                 from .report import analyze
-                summary = analyze(args.csv,out,args.threshold,args.stage_gap,args.packet_gap,args.stages,args.baseline,args.screen,args.durations)
+                summary = analyze(args.csv,out,args.threshold,args.stage_gap,args.packet_gap,args.stages,args.baseline,args.screen,args.durations,args.profile)
                 print(json.dumps(summary,ensure_ascii=False))
         print(args.out.resolve())
     except (ValueError,OSError,ImportError) as error:
